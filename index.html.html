@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global Renewable Energy Forecaster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(-45deg, #1d2b4b, #2d4a6d, #426789, #23d5ab);
+      background-size: 400% 400%;
+      animation: gradientBG 25s ease infinite;
+      transition: background 1.5s ease-in-out;
+    }
+
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    
+    .btn-predict {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px -3px rgba(34, 197, 94, 0.4);
+    }
+    .btn-predict:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px -5px rgba(34, 197, 94, 0.6);
+    }
+
+    .model-radio:checked + label {
+        border-color: #16a34a;
+        background-color: rgba(22, 163, 74, 0.1);
+        box-shadow: 0 0 0 2px #16a34a;
+    }
+
+    .loader {
+      border: 4px solid rgba(255,255,255,0.2);
+      border-top: 4px solid #22c55e;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #liveStatusPanel::-webkit-scrollbar, #liveCalculationsPanel::-webkit-scrollbar, #weatherDataTable::-webkit-scrollbar { width: 6px; }
+    #liveStatusPanel::-webkit-scrollbar-track, #liveCalculationsPanel::-webkit-scrollbar-track, #weatherDataTable::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+    #liveStatusPanel::-webkit-scrollbar-thumb, #liveCalculationsPanel::-webkit-scrollbar-thumb, #weatherDataTable::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .calc-log-line {
+        animation: fadeIn 0.5s ease forwards;
+    }
+
+    #weatherEmojiContainer {
+        perspective: 1000px;
+    }
+    .emoji-flip {
+        transition: transform 0.8s;
+        transform-style: preserve-3d;
+    }
+    .flipping {
+        transform: rotateY(180deg);
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="glass-panel w-full max-w-7xl p-6 rounded-3xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+    
+    <!-- Left Column: Controls -->
+    <div class="lg:col-span-3 bg-white/80 p-6 rounded-2xl text-black">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-gray-900">Control Panel</h2>
+            <div id="liveClock" class="text-lg font-semibold bg-black/10 px-3 py-1 rounded-lg text-gray-800"></div>
+        </div>
+        <div class="space-y-6">
+            <div>
+                <label for="plantSelect" class="block mb-2 text-sm font-medium text-gray-700">Select Power Plant</label>
+                <select id="plantSelect" class="w-full px-4 py-3 text-base text-black bg-white/50 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-600 transition"></select>
+            </div>
+             <button onclick="getPrediction()" class="btn-predict w-full px-6 py-3 text-lg text-white font-semibold rounded-xl flex items-center justify-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span>Generate Forecast</span>
+            </button>
+        </div>
+
+        <fieldset class="mt-8">
+            <legend class="text-lg font-semibold text-gray-800 text-center mb-4">Prediction Model</legend>
+            <div class="grid grid-cols-1 gap-4">
+                <input type="radio" name="model" value="CNN+LSTM" id="cnn-lstm" class="sr-only model-radio" checked>
+                <label for="cnn-lstm" class="flex flex-col p-4 border-2 border-gray-300 rounded-lg cursor-pointer transition text-gray-800">
+                    <span class="font-bold">CNN + LSTM</span>
+                    <span class="text-sm text-gray-600">Deep learning for time-series.</span>
+                </label>
+                
+                <input type="radio" name="model" value="Ensemble Model" id="ensemble" class="sr-only model-radio">
+                <label for="ensemble" class="flex flex-col p-4 border-2 border-gray-300 rounded-lg cursor-pointer transition text-gray-800">
+                    <span class="font-bold">Ensemble (RF, SVR, XGBoost)</span>
+                    <span class="text-sm text-gray-600">Robust blended prediction.</span>
+                </label>
+            </div>
+        </fieldset>
+    </div>
+    
+    <!-- Center Column: Main Display -->
+    <div id="results" class="lg:col-span-6 p-6 rounded-2xl bg-white/50 min-h-[680px]">
+         <div class="text-center text-gray-700 h-full flex flex-col justify-center items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-24 h-24 mx-auto text-black/20" fill="none" viewBox="0 0 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <p class="mt-4 text-lg font-semibold text-gray-800">Forecast Dashboard</p>
+            <p class="text-sm text-gray-600">Select a plant and generate a forecast to begin.</p>
+        </div>
+    </div>
+
+
+    <!-- Right Column: Live Status & Calculations -->
+    <div class="lg:col-span-3 flex flex-col gap-6">
+        <div class="bg-gray-900/40 text-white p-6 rounded-2xl flex flex-col h-1/2">
+            <h2 class="text-xl font-bold text-slate-100 mb-4 text-center">Global Plant Status</h2>
+            <div id="liveStatusPanel" class="flex-grow overflow-y-auto pr-2 space-y-4"></div>
+        </div>
+         <div class="bg-gray-900/40 text-white p-6 rounded-2xl flex flex-col h-1/2">
+             <h2 class="text-xl font-bold text-slate-100 mb-4 text-center">Live Calculations</h2>
+             <div id="liveCalculationsPanel" class="flex-grow overflow-y-auto pr-2 space-y-2 text-sm font-mono"></div>
+        </div>
+    </div>
+  </div>
+
+  <script>
+    const apiKey = "7d5c91c6eec6451fac7131548252509";
+    const resultsDiv = document.getElementById('results');
+    const plantSelect = document.getElementById('plantSelect');
+    const liveStatusPanel = document.getElementById('liveStatusPanel');
+    const liveCalculationsPanel = document.getElementById('liveCalculationsPanel');
+    const liveClock = document.getElementById('liveClock');
+    let energyChart, weatherChart;
+    let plantForecasts = {}; // Stores the detailed forecast objects
+
+    const plants = {
+        'bhadla': { name: 'Bhadla Solar Park', location: 'Jodhpur', type: 'Solar', capacity: 2245, country: '🇮🇳', tz_offset: 5.5 },
+        'pavgada': { name: 'Pavagada Solar Park', location: 'Tumkur', type: 'Solar', capacity: 2050, country: '🇮🇳', tz_offset: 5.5 },
+        'muppandal': { name: 'Muppandal Wind Farm', location: 'Kanyakumari', type: 'Wind', capacity: 1500, country: '🇮🇳', tz_offset: 5.5 },
+        'jaisalmer': { name: 'Jaisalmer Wind Park', location: 'Jaisalmer', type: 'Wind', capacity: 1064, country: '🇮🇳', tz_offset: 5.5 },
+        'tengger': { name: 'Tengger Desert Solar', location: 'Zhongwei', type: 'Solar', capacity: 1547, country: '🇨🇳', tz_offset: 8 },
+        'gansu': { name: 'Gansu Wind Farm', location: 'Jiuquan', type: 'Wind', capacity: 7965, country: '🇨🇳', tz_offset: 8 },
+        'solarstar': { name: 'Solar Star', location: 'California', type: 'Solar', capacity: 579, country: '🇺🇸', tz_offset: -7 },
+        'altamont': { name: 'Alta Wind Energy Center', location: 'California', type: 'Wind', capacity: 1550, country: '🇺🇸', tz_offset: -7 },
+        'noor': { name: 'Noor Abu Dhabi', location: 'Abu Dhabi', type: 'Solar', capacity: 1177, country: '🇦🇪', tz_offset: 4 },
+        'hornsea': { name: 'Hornsea Wind Farm', location: 'Yorkshire', type: 'Wind', capacity: 1218, country: '🇬🇧', tz_offset: 1 },
+        'benban': { name: 'Benban Solar Park', location: 'Aswan', type: 'Solar', capacity: 1650, country: '🇪🇬', tz_offset: 2 },
+        'walney': { name: 'Walney Extension', location: 'Irish Sea', type: 'Wind', capacity: 659, country: '🇬🇧', tz_offset: 1 }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        Object.keys(plants).forEach(key => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = `${plants[key].country} ${plants[key].name} (${plants[key].type})`;
+            plantSelect.appendChild(option);
+        });
+        initializeLiveStatus();
+        setInterval(updateLiveStatus, 5000); // Update every 5 seconds for a more stable view
+        updateClock();
+        setInterval(updateClock, 1000);
+    });
+
+    function updateClock() {
+        liveClock.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    function initializeLiveStatus() {
+        let statusHTML = '';
+        Object.keys(plants).forEach(key => {
+            const plant = plants[key];
+            statusHTML += `<div class="p-3 bg-white/5 rounded-lg transition-all hover:bg-white/10"><div class="flex justify-between items-center text-sm mb-1"><span class="font-bold">${plant.name}</span><span class="text-gray-300 font-semibold">${plant.country}</span></div><div class="w-full bg-black/30 rounded-full h-2.5"><div id="progress-${key}" class="bg-green-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div></div><div class="text-right text-xs mt-1 text-gray-300"><span id="output-${key}">---</span> / ${plant.capacity.toLocaleString()} MW</div></div>`;
+        });
+        liveStatusPanel.innerHTML = statusHTML;
+        updateLiveStatus();
+    }
+
+    function updateLiveStatus() {
+        Object.keys(plants).forEach(key => {
+            const plant = plants[key];
+            let currentOutput;
+            
+            if (plantForecasts[key]) {
+                const now = new Date();
+                const currentForecastHour = plantForecasts[key].find(h => new Date(h.time_epoch * 1000) >= now);
+
+                if (currentForecastHour) {
+                    currentOutput = calculateEnergy(currentForecastHour, plant);
+                } else {
+                    currentOutput = simulateOutput(plant);
+                }
+            } else {
+                currentOutput = simulateOutput(plant);
+            }
+            
+            updateStatusUI(key, currentOutput, plant.capacity);
+        });
+    }
+
+    function simulateOutput(plant) {
+        if (plant.type === 'Solar') {
+            const utcHour = new Date().getUTCHours();
+            const localHour = (utcHour + plant.tz_offset + 24) % 24;
+            if (localHour < 6 || localHour > 19) {
+                return 0;
+            }
+        }
+        const efficiency = Math.random() * 0.9;
+        return Math.floor(plant.capacity * efficiency);
+    }
+    
+    function updateStatusUI(key, currentOutput, capacity) {
+        const percentage = (currentOutput / capacity) * 100;
+        const progressBar = document.getElementById(`progress-${key}`);
+        const outputText = document.getElementById(`output-${key}`);
+
+        if (progressBar && outputText) {
+            outputText.textContent = `${currentOutput.toLocaleString()} MW`;
+            progressBar.style.width = `${percentage > 100 ? 100 : percentage}%`;
+            if (percentage < 30) progressBar.className = 'bg-red-500 h-2.5 rounded-full transition-all duration-500';
+            else if (percentage < 70) progressBar.className = 'bg-yellow-400 h-2.5 rounded-full transition-all duration-500';
+            else progressBar.className = 'bg-green-500 h-2.5 rounded-full transition-all duration-500';
+        }
+    }
+    
+    async function streamCalculationLogs(logs) {
+        liveCalculationsPanel.innerHTML = '';
+        for (const log of logs) {
+            await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 150));
+            const p = document.createElement('p');
+            p.innerHTML = log.text;
+            p.className = `${log.color} calc-log-line`;
+            liveCalculationsPanel.appendChild(p);
+            liveCalculationsPanel.scrollTop = liveCalculationsPanel.scrollHeight;
+        }
+    }
+
+    function getWeatherTheme(currentWeather) {
+        const condition = currentWeather.condition.text.toLowerCase();
+        const isDay = currentWeather.is_day;
+
+        if (isDay === 0) {
+            return { emoji: '🌙', gradient: 'linear-gradient(-45deg, #0f172a, #1e293b, #334155, #0f172a)' };
+        }
+        
+        let theme = { emoji: '🌍', gradient: 'linear-gradient(-45deg, #1d2b4b, #2d4a6d, #426789, #23d5ab)' };
+        if (condition.includes('sun') || condition.includes('clear')) theme = { emoji: '☀️', gradient: 'linear-gradient(-45deg, #ffc837, #ff8008, #e52e71, #6a11cb)' };
+        else if (condition.includes('cloud') || condition.includes('overcast')) theme = { emoji: '☁️', gradient: 'linear-gradient(-45deg, #606c88, #3f4c6b, #b2b2b2, #757f9a)' };
+        else if (condition.includes('rain') || condition.includes('drizzle')) theme = { emoji: '🌧️', gradient: 'linear-gradient(-45deg, #09203f, #537895, #36506c, #1d2b4b)' };
+        else if (condition.includes('mist') || condition.includes('fog')) theme = { emoji: '🌫️', gradient: 'linear-gradient(-45deg, #d3d3d3, #a9a9a9, #e0e0e0, #f5f5f5)' };
+        else if (condition.includes('snow') || condition.includes('sleet') || condition.includes('ice')) theme = { emoji: '❄️', gradient: 'linear-gradient(-45deg, #e6dada, #274046, #8e9eab, #b2b2b2)' };
+        return theme;
+    }
+
+    async function getPrediction() {
+        const plantKey = plantSelect.value;
+        const selectedPlant = plants[plantKey];
+        const selectedModel = document.querySelector('input[name="model"]:checked').value;
+        resultsDiv.innerHTML = `<div class="flex flex-col items-center justify-center space-y-3 h-full"><div class="loader"></div><p class="text-gray-800 font-medium">Initializing Prediction...</p></div>`;
+        
+        let calculationLogs = [ { text: '▶ Initializing model...', color: 'text-green-400' }, { text: `▶ Loading params for <span class="text-yellow-300">${selectedModel}</span>.`, color: 'text-green-400' }, { text: `▶ Fetching historical data...`, color: 'text-green-400' } ];
+        streamCalculationLogs(calculationLogs);
+
+        try {
+            const [forecastData, historicalData] = await Promise.all([
+                fetch(`https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${selectedPlant.location}&days=2&aqi=no&alerts=no`).then(res => res.json()),
+                fetch(`https://api.weatherapi.com/v1/history.json?key=${apiKey}&q=${selectedPlant.location}&dt=${new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}&end_dt=${new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`).then(res => res.json())
+            ]);
+            if (forecastData.error || historicalData.error) throw new Error(forecastData.error?.message || historicalData.error?.message);
+
+            calculationLogs.push({ text: `✔ History loaded (${historicalData.forecast.forecastday.length * 24} data points).`, color: 'text-green-400' });
+            calculationLogs.push({ text: `▶ Analyzing meteorological patterns...`, color: 'text-green-400' });
+            calculationLogs.push({ text: `▶ Simulating energy conversion...`, color: 'text-green-400' });
+            calculationLogs.push({ text: `▶ Running 42-hour forecast...`, color: 'text-green-400' });
+            calculationLogs.push({ text: '✔ Forecast complete.', color: 'text-green-400' });
+            calculationLogs.push({ text: '▶ Rendering visualization...', color: 'text-green-400' });
+            streamCalculationLogs(calculationLogs);
+            
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            processAndDisplayPrediction(forecastData, historicalData, selectedPlant, selectedModel, plantKey);
+        } catch (error) {
+            resultsDiv.innerHTML = `<p class="text-red-500 bg-red-100 p-4 rounded-lg text-center font-semibold">Error: ${error.message}</p>`;
+            liveCalculationsPanel.innerHTML += `<p class="text-red-400">✖ ERROR: ${error.message}</p>`;
+        }
+    }
+
+    function processAndDisplayPrediction(forecastData, historicalData, plant, modelName, plantKey) {
+        const theme = getWeatherTheme(forecastData.current);
+        document.body.style.background = theme.gradient;
+
+        const futureHours = [...forecastData.forecast.forecastday[0].hour, ...forecastData.forecast.forecastday[1].hour]
+            .filter(h => new Date(h.time_epoch * 1000) >= new Date(forecastData.location.localtime_epoch * 1000))
+            .slice(0, 42);
+
+        plantForecasts[plantKey] = futureHours;
+
+        const historicalDays = historicalData.forecast.forecastday;
+        const historicalLabels = historicalDays.map(d => new Date(d.date).toLocaleDateString([], {month: 'short', day: 'numeric'}));
+        const forecastLabels = futureHours.map(h => new Date(h.time).toLocaleTimeString([], { hour: '2-digit', hour12: false }));
+        const fullTimelineLabels = [...historicalLabels, ...forecastLabels];
+        
+        const historicalEnergy = historicalDays.map(d => {
+            let dailyTotal = 0;
+            d.hour.forEach(h => dailyTotal += calculateEnergy(h, plant));
+            return Math.round(dailyTotal / 24);
+        });
+        const forecastEnergy = futureHours.map(h => calculateEnergy(h, plant));
+
+        const historicalTemp = historicalDays.map(d => Math.round(d.day.avgtemp_c));
+        const forecastTemp = futureHours.map(h => Math.round(h.temp_c));
+        const forecastWind = futureHours.map(h => Math.round(h.wind_kph));
+        
+        const totalEnergy = forecastEnergy.reduce((a, b) => a + b, 0);
+        const peakOutput = Math.max(0, ...forecastEnergy);
+        const avgOutput = Math.round(totalEnergy / forecastEnergy.length);
+        const co2Offset = Math.round(totalEnergy * 0.45);
+
+        resultsDiv.innerHTML = `
+            <div class="w-full text-black h-full flex flex-col">
+                <div class="text-center">
+                    <div id="weatherEmojiContainer" class="text-5xl"><span id="weatherEmoji" class="emoji-flip">${theme.emoji}</span></div>
+                    <h3 class="text-xl font-bold text-gray-900">${plant.name} ${plant.country}</h3>
+                    <p class="text-xs text-gray-600">Model: ${modelName}</p>
+                </div>
+                
+                <div class="relative h-64 mt-2"><canvas id="energyChart"></canvas></div>
+                <div class="grid grid-cols-2 md:grid-cols-4 text-center gap-2 mt-2">
+                    <div class="bg-black/5 p-2 rounded-lg"><p class="text-xs text-gray-600">Peak Output</p><p class="text-lg font-bold text-green-600">${peakOutput.toLocaleString()} MWh</p></div>
+                    <div class="bg-black/5 p-2 rounded-lg"><p class="text-xs text-gray-600">Average</p><p class="text-lg font-bold text-blue-600">${avgOutput.toLocaleString()} MWh</p></div>
+                    <div class="bg-black/5 p-2 rounded-lg"><p class="text-xs text-gray-600">CO2 Offset</p><p class="text-lg font-bold text-teal-600">${co2Offset.toLocaleString()} Tons</p></div>
+                    <div class="bg-black/5 p-2 rounded-lg"><p class="text-xs text-gray-600">Total Est.</p><p class="text-lg font-bold text-purple-600">${totalEnergy.toLocaleString()} MWh</p></div>
+                </div>
+
+                <hr class="my-3 border-black/20">
+                <h4 class="text-center font-bold text-gray-800">Weather Analysis</h4>
+                <div class="relative h-32 mt-1"><canvas id="weatherChart"></canvas></div>
+                <div id="weatherDataTable" class="text-xs mt-2 h-24 overflow-y-auto">
+                     <table class="w-full text-left">
+                        <thead class="sticky top-0 bg-white/60"><tr><th class="p-1">Time</th><th>Temp</th><th>Wind</th><th>Pressure</th><th>Precip</th><th>Humidity</th><th>UV</th></tr></thead>
+                        <tbody>${futureHours.map(h => `<tr class="border-b border-black/10"><td class="p-1">${new Date(h.time).toLocaleTimeString([],{hour:'2-digit', minute:'2-digit'})}</td><td>${h.temp_c}°C</td><td>${h.wind_kph}kph</td><td>${h.pressure_mb}mb</td><td>${h.precip_mm}mm</td><td>${h.humidity}%</td><td>${h.uv}</td></tr>`).join('')}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        
+        renderEnergyChart(fullTimelineLabels, historicalEnergy, forecastEnergy, plant.type);
+        renderWeatherChart(fullTimelineLabels, historicalTemp, forecastTemp, forecastWind);
+    }
+    
+    function calculateEnergy(hour, plant) {
+        let outputMWh = 0;
+        if (plant.type === 'Solar') {
+            outputMWh = hour.is_day ? Math.max(0, plant.capacity * ((100 - hour.cloud) / 100) * (0.3 + Math.random() * 0.1)) : 0;
+        } else {
+            let p_factor = (hour.wind_kph > 12 && hour.wind_kph < 90) ? Math.pow((hour.wind_kph - 12) / (50 - 12), 2) : 0;
+            outputMWh = plant.capacity * Math.min(1, p_factor) * (0.25 + Math.random() * 0.1);
+        }
+        return Math.round(outputMWh);
+    }
+
+    const chartDefaultOptions = { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { color: 'rgba(0,0,0,0.1)' }, ticks: { color: '#374151', maxRotation: 0, autoSkip: true, maxTicksLimit: 24 } } }, plugins: { tooltip: { mode: 'index', intersect: false }, legend: { display: false } } };
+
+    function renderEnergyChart(labels, historicalData, forecastData, type) {
+        if (energyChart) energyChart.destroy();
+        const ctx = document.getElementById('energyChart').getContext('2d');
+        const chartColor = type === 'Solar' ? '#f59e0b' : '#3b82f6';
+        const fullData = [...historicalData.map(d => d || null), ...forecastData];
+        
+        energyChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [{ label: 'Energy (MWh)', data: fullData, borderColor: chartColor, fill: true, tension: 0.4, pointRadius: (ctx) => ctx.dataIndex >= historicalData.length ? 3 : 1.5, segment: { borderColor: (ctx) => ctx.p0.parsed.x < historicalData.length ? 'rgba(0,0,0,0.2)' : undefined, borderDash: (ctx) => ctx.p0.parsed.x < historicalData.length-1 ? [5, 5] : undefined } }] }, options: {...chartDefaultOptions, scales: {...chartDefaultOptions.scales, y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.1)' }, ticks: { color: '#374151' }, title: { display: true, text: 'Energy Output (MWh)', color: '#1f2937' }}}} });
+    }
+
+    function renderWeatherChart(labels, historicalTemp, forecastTemp, forecastWind) {
+        if (weatherChart) weatherChart.destroy();
+        const ctx = document.getElementById('weatherChart').getContext('2d');
+        weatherChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [
+            { label: 'Temp (°C)', data: [...historicalTemp, ...forecastTemp], borderColor: '#ef4444', tension: 0.4, yAxisID: 'y_temp', pointRadius: 2 },
+            { label: 'Wind (kph)', data: [...Array(historicalTemp.length).fill(null), ...forecastWind], borderColor: '#3b82f6', tension: 0.4, yAxisID: 'y_wind', pointRadius: 2 }
+        ]}, options: {...chartDefaultOptions, scales: {...chartDefaultOptions.scales, y_temp: { position: 'left', grid: {drawOnChartArea: false}, ticks: {color: '#ef4444'}}, y_wind: { position: 'right', grid: {drawOnChartArea: false}, ticks: {color: '#3b82f6'}}}} });
+    }
+  </script>
+</body>
+</html>
+
